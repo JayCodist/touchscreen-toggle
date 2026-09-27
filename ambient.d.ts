@@ -16,11 +16,3 @@ declare class TextDecoder {
     constructor(label?: string, options?: { fatal?: boolean; ignoreBOM?: boolean });
     decode(input?: ArrayBufferView | ArrayBuffer | null): string;
 }
-
-// Clutter.Actor.set_tooltip_text exists at runtime but is missing from the
-// generated GIR types. This structural interface lets callers reach it in a
-// type-safe way via `asTooltipable(...)` without augmenting (and destabilizing)
-// the real Button/Actor classes.
-interface Tooltipable {
-    set_tooltip_text(text: string): void;
-}

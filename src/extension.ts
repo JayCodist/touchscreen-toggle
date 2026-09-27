@@ -22,7 +22,12 @@ export default class TouchscreenToggleExtension extends Extension {
     #udev: GUdev.Client | null = null;
     #udevId = 0;
     #debounceId = 0;
-    #devices: Touchscreen[] = [];
+    // Every touchscreen seen this session, keyed by syspath. Persisted across
+    // rescans because an unbound device drops its ID_INPUT_TOUCHSCREEN udev
+    // property (and its input/* children), so re-enumeration can't find it —
+    // without this, a disabled device would vanish from the menu and could
+    // never be switched back on.
+    #known = new Map<string, Touchscreen>();
     #syncing = false;
 
     #runHelper(syspath: string, subsystem: string, action: string): boolean {
@@ -38,7 +43,7 @@ export default class TouchscreenToggleExtension extends Extension {
     }
 
     #anyEnabled(): boolean {
-        return this.#devices.some(d => isBound(d.syspath));
+        return [...this.#known.values()].some(d => isBound(d.syspath));
     }
 
     #menu(): PopupMenu {
@@ -52,23 +57,28 @@ export default class TouchscreenToggleExtension extends Extension {
         const any = this.#anyEnabled();
         this.#icon.gicon = Gio.icon_new_for_string(
             any ? 'touchscreen-on-symbolic' : 'touchscreen-off-symbolic');
-        // set_tooltip_text is a runtime Clutter method absent from the GIR types.
-        (this.#button as unknown as Tooltipable).set_tooltip_text(
-            any ? _('Touchscreen enabled') : _('Touchscreen disabled'));
+        // GNOME 50 Clutter has no set_tooltip_text; accessible_name is the
+        // supported label (screen-reader name + hover text).
+        this.#button.accessible_name = any
+            ? _('Touchscreen enabled')
+            : _('Touchscreen disabled');
     }
 
     #rebuildMenu(): void {
         const menu = this.#menu();
         menu.removeAll();
 
-        if (this.#devices.length === 0) {
+        const devices = [...this.#known.values()]
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        if (devices.length === 0) {
             const item = new PopupMenuItem(_('No touchscreen found'));
             item.setSensitive(false);
             menu.addMenuItem(item);
             return;
         }
 
-        for (const dev of this.#devices) {
+        for (const dev of devices) {
             const item = new PopupSwitchMenuItem(dev.name, isBound(dev.syspath));
             item.connect('toggled', () => {
                 if (this.#syncing)
@@ -81,7 +91,10 @@ export default class TouchscreenToggleExtension extends Extension {
     }
 
     #rescan(): void {
-        this.#devices = listTouchscreens();
+        // Merge freshly-detected devices into the session memory; never forget
+        // one we've already shown (its udev props disappear once unbound).
+        for (const dev of listTouchscreens())
+            this.#known.set(dev.syspath, dev);
         this.#rebuildMenu();
         this.#updateIcon();
     }
