@@ -1,0 +1,20 @@
+{
+    "compilerOptions": {
+        "target": "es2024",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "lib": ["ESNext"],
+        "outDir": "dist",
+        "rootDir": "src",
+        "strict": true,
+        "noImplicitOverride": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noFallthroughCasesInSwitch": true,
+        "exactOptionalPropertyTypes": false,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": true,
+        "types": []
+    },
+    "include": ["src/**/*.ts", "ambient.d.ts"]
+}

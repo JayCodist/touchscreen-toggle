@@ -1,0 +1,17 @@
+name: Dependencies
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels: ["dependencies"]
+    groups:
+      girs:
+        patterns:
+          - "@girs/*"
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels: ["ci"]

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check + build
+        run: make build
+
+      - name: Validate helper script
+        run: bash -n data/touchscreen-toggle.sh
+
+      - name: Smoke-test helper input validation
+        run: |
+          H=data/touchscreen-toggle.sh
+          chmod +x "$H"
+          # These must be rejected before any sysfs write (exit code 2).
+          "$H" /etc/passwd hid toggle && exit 1 || test $? -eq 2
+          "$H" "/sys/bus/hid/devices/../../etc" hid on && exit 1 || test $? -eq 2
+          "$H" /sys/bus/hid/devices/does.not.exist hid toggle && exit 1 || true
+          echo "helper validation OK"
+
+      - name: Verify zip assembles
+        run: |
+          make dist
+          unzip -l touchscreen-toggle@jaycodist-*.zip | grep -q extension.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: touchscreen-toggle@jaycodist-*.zip

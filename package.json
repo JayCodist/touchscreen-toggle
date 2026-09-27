@@ -1,0 +1,33 @@
+{
+  "name": "touchscreen-toggle",
+  "version": "1.0.0",
+  "description": "GNOME Shell extension to enable/disable touchscreens from the top bar (driver-level, hardware-agnostic)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [],
+  "author": "Johnson Ubaezuonu <jaycodist@gmail.com>",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "repository": {
+    "url": "git+https://github.com/JayCodist/touchscreen-toggle.git"
+  },
+  "devDependencies": {
+    "@girs/gdk-4.0": "^4.9.0",
+    "@girs/gnome-shell": "^50.0.4",
+    "@girs/gtk-4.0": "^4.9.0",
+    "@girs/gudev-1.0": "^4.9.0",
+    "@girs/st-18": "^4.9.0",
+    "typescript": "^7.0.2"
+  },
+  "homepage": "https://github.com/JayCodist/touchscreen-toggle#readme",
+  "bugs": {
+    "url": "https://github.com/JayCodist/touchscreen-toggle/issues"
+  },
+  "private": "false"
+}

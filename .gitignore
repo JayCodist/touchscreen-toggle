@@ -1,0 +1,18 @@
+# Build output
+dist/
+*.zip
+
+# Dependencies
+node_modules/
+package
+node_modules/.install-stamp
+
+# Editor / OS cruft
+*~
+.*.swp
+.DS_Store
+.idea/
+.vscode/
+
+# Local overrides
+*.local

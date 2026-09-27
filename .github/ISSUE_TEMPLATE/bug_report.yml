@@ -1,0 +1,53 @@
+name: 🐛 Bug report
+description: Report a bug or a device that isn't detected/toggled correctly
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report!
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      placeholder: What happened vs. what you expected?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Click the panel icon
+        2. Toggle "..."
+        3. See error
+    validations:
+      required: true
+  - type: input
+    id: gnome
+    attributes:
+      label: GNOME Shell version
+      placeholder: e.g. 50.1 (run: gnome-shell --version)
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution
+      placeholder: e.g. Ubuntu 26.04
+    validations:
+      required: true
+  - type: textarea
+    id: devices
+    attributes:
+      label: Touchscreen device info
+      description: Help us support your hardware — paste the output of the command below.
+      render: shell
+      placeholder: |
+        udevadm info -e | grep -B5 ID_INPUT_TOUCHSCREEN=1
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Optional — output of `journalctl --user -b | grep -i touchscreen`
+      render: shell
