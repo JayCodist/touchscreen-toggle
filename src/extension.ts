@@ -16,19 +16,56 @@ const HELPER_PATH = '/usr/local/bin/touchscreen-toggle';
 // Subsystems that can carry a touchscreen; uevents here trigger a re-scan.
 const WATCH_SUBSYSTEMS = ['hid', 'usb', 'i2c', 'serio', 'input'];
 
+// Where the session-independent device registry is stored. An unbound device
+// loses its ID_INPUT_TOUCHSCREEN udev property, so enumeration alone cannot
+// find it again after logout/reboot; persisting what we've seen keeps the
+// menu able to re-enable it.
+const STATE_PATH = GLib.build_filenamev(
+    [GLib.get_user_data_dir(), 'touchscreen-toggle', 'devices.json']);
+
 export default class TouchscreenToggleExtension extends Extension {
     #button: Button | null = null;
     #icon: St.Icon | null = null;
     #udev: GUdev.Client | null = null;
     #udevId = 0;
     #debounceId = 0;
-    // Every touchscreen seen this session, keyed by syspath. Persisted across
-    // rescans because an unbound device drops its ID_INPUT_TOUCHSCREEN udev
-    // property (and its input/* children), so re-enumeration can't find it —
-    // without this, a disabled device would vanish from the menu and could
-    // never be switched back on.
+    // Every touchscreen ever seen (persisted to STATE_PATH, see above), keyed
+    // by syspath. Drives the menu so a disabled device never disappears from it.
     #known = new Map<string, Touchscreen>();
     #syncing = false;
+
+    #loadKnown(): void {
+        try {
+            const [ok, bytes] = GLib.file_get_contents(STATE_PATH);
+            if (!ok)
+                return;
+            const list = JSON.parse(new TextDecoder().decode(bytes));
+            if (!Array.isArray(list))
+                return;
+            for (const d of list) {
+                if (!d?.syspath || !d?.subsystem || !d?.name)
+                    continue;
+                // Prune devices physically removed since last session (an
+                // unbound-but-present touchscreen keeps its sysfs dir, so this
+                // only drops genuinely gone hardware).
+                if (!Gio.File.new_for_path(d.syspath).query_exists(null))
+                    continue;
+                this.#known.set(d.syspath, d);
+            }
+        } catch {
+            // first run / corrupt state: start empty
+        }
+    }
+
+    #saveKnown(): void {
+        try {
+            const dir = GLib.path_get_dirname(STATE_PATH);
+            GLib.mkdir_with_parents(dir, 0o755);
+            GLib.file_set_contents(STATE_PATH, JSON.stringify([...this.#known.values()]));
+        } catch (e) {
+            log(`touchscreen-toggle: could not persist device list: ${e}`);
+        }
+    }
 
     #runHelper(syspath: string, subsystem: string, action: string): boolean {
         const argv = ['sudo', '-n', HELPER_PATH, syspath, subsystem, action];
@@ -91,10 +128,11 @@ export default class TouchscreenToggleExtension extends Extension {
     }
 
     #rescan(): void {
-        // Merge freshly-detected devices into the session memory; never forget
-        // one we've already shown (its udev props disappear once unbound).
+        // Merge freshly-detected devices into the registry; never forget one
+        // we've already seen (its udev props disappear once unbound).
         for (const dev of listTouchscreens())
             this.#known.set(dev.syspath, dev);
+        this.#saveKnown();
         this.#rebuildMenu();
         this.#updateIcon();
     }
@@ -128,6 +166,7 @@ export default class TouchscreenToggleExtension extends Extension {
         });
 
         Main.panel.addToStatusArea(this.uuid, button);
+        this.#loadKnown();
         this.#rescan();
 
         const udev = GUdev.Client.new(WATCH_SUBSYSTEMS);
