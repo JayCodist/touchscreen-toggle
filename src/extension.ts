@@ -1,3 +1,4 @@
+import Clutter from 'gi://Clutter';
 import St from 'gi://St';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
@@ -24,6 +25,7 @@ const STATE_PATH = GLib.build_filenamev(
 export default class TouchscreenToggleExtension extends Extension {
     #button: Button | null = null;
     #icon: St.Icon | null = null;
+    #popup: PopupMenu | null = null;
     #udev: GUdev.Client | null = null;
     #udevId = 0;
     #debounceId = 0;
@@ -78,8 +80,7 @@ export default class TouchscreenToggleExtension extends Extension {
     }
 
     #menu(): PopupMenu {
-        // Created without dontCreateMenu, so button.menu is a real PopupMenu.
-        return this.#button!.menu as PopupMenu;
+        return this.#popup!;
     }
 
     // Install the bundled symbolic icons into the user icon theme so the panel
@@ -183,18 +184,49 @@ export default class TouchscreenToggleExtension extends Extension {
         });
     }
 
+    // Single device: click toggles it directly (original UX). Two or more:
+    // click opens the per-device menu. dontCreateMenu keeps the button's own
+    // click gesture disabled so our button-press-event fully controls behavior.
+    #onActivate(): void {
+        const devices = [...this.#known.values()];
+        if (devices.length === 1) {
+            const dev = devices[0];
+            this.#runHelper(dev.syspath, dev.subsystem, isBound(dev.syspath) ? 'off' : 'on');
+            this.#rescan();
+        } else {
+            this.#menu().toggle();
+        }
+    }
+
     override enable(): void {
         this.#installIcons();
 
-        // Auto-menu Button: it creates + registers its own PopupMenu (button.menu).
-        const button = new Button(0.5, _('Touchscreen Toggle'));
+        // dontCreateMenu=true -> button.menu is an inert PopupDummyMenu and the
+        // auto click gesture is off; we drive everything from button-press-event.
+        const button = new Button(0.5, _('Touchscreen Toggle'), true);
         this.#button = button;
         const icon = new St.Icon({ style_class: 'system-status-icon' });
         this.#icon = icon;
         button.add_child(icon);
-        this.#menu().connect('open-state-changed', (_menu, isOpen) => {
+
+        // Our own popup, registered with the panel's menu manager so an
+        // outside click closes it (PopupMenuManager handles the grab).
+        const popup = new PopupMenu(button, 0.5, St.Side.TOP);
+        this.#popup = popup;
+        Main.uiGroup.add_child(popup.actor);
+        popup.actor.hide();
+        Main.panel.menuManager.addMenu(popup);
+        popup.connect('open-state-changed', (_menu, isOpen) => {
             if (isOpen)
                 this.#rescan();
+        });
+
+        button.connect('button-press-event', (_actor, event) => {
+            if (event.get_button() === Clutter.BUTTON_PRIMARY) {
+                this.#onActivate();
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
         });
 
         Main.panel.addToStatusArea(this.uuid, button);
@@ -216,6 +248,11 @@ export default class TouchscreenToggleExtension extends Extension {
             this.#debounceId = 0;
         }
         this.#udev = null;
+        if (this.#popup) {
+            Main.panel.menuManager.removeMenu(this.#popup);
+            this.#popup.destroy();
+            this.#popup = null;
+        }
         this.#button?.destroy();
         this.#button = null;
         this.#icon = null;

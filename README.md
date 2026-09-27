@@ -7,8 +7,9 @@ works on **Wayland and X11**, on **GNOME 45–51**, and with **any** touchscreen
 
 ## How it works
 
-- The panel icon reflects whether any detected touchscreen is currently bound
-  to its driver. Click it to open a menu with one on/off switch per device.
+- The panel icon reflects whether detected touchscreens are connected. With a
+  single touchscreen, clicking the icon toggles it directly; with two or more,
+  clicking opens a menu with one on/off switch per device.
 - Detection reads udev: any input device advertised as `ID_INPUT_TOUCHSCREEN=1`
   is grouped up to the nearest bus device that owns a driver — that is the node
   the kernel's `unbind` / `drivers_probe` ABI operates on.
