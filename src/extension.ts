@@ -6,7 +6,7 @@ import GUdev from 'gi://GUdev';
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Button } from 'resource:///org/gnome/shell/ui/panelMenu.js';
-import { PopupMenu, PopupMenuItem, PopupSwitchMenuItem } from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import { PopupMenu, PopupMenuItem, PopupMenuManager, PopupSwitchMenuItem } from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { listTouchscreens, isBound, type Touchscreen } from './deviceUtils.js';
 
 // Fixed, documented location of the privileged helper (see README install step).
@@ -26,6 +26,13 @@ export default class TouchscreenToggleExtension extends Extension {
     #button: Button | null = null;
     #icon: St.Icon | null = null;
     #popup: PopupMenu | null = null;
+    // Private manager owning our popup's open/close grab. Deliberately NOT the
+    // shared Main.panel.menuManager: registering the real popup there alongside
+    // the button's auto-registered PopupDummyMenu (same source actor) makes the
+    // panel open it on hover via _findMenuForSource. A private manager keeps the
+    // outside-click-close grab while its captured-event lives on the hidden
+    // BoxPointer, so hovering the button can never trigger an open.
+    #menuManager: PopupMenuManager | null = null;
     #udev: GUdev.Client | null = null;
     #udevId = 0;
     #debounceId = 0;
@@ -209,13 +216,16 @@ export default class TouchscreenToggleExtension extends Extension {
         this.#icon = icon;
         button.add_child(icon);
 
-        // Our own popup, registered with the panel's menu manager so an
-        // outside click closes it (PopupMenuManager handles the grab).
+        // Our own popup, owned by a private manager so an outside click closes
+        // it (the manager handles the modal grab) without the panel's shared
+        // manager ever opening it on hover. See #menuManager for why it must be
+        // private rather than Main.panel.menuManager.
         const popup = new PopupMenu(button, 0.5, St.Side.TOP);
         this.#popup = popup;
         Main.uiGroup.add_child(popup.actor);
         popup.actor.hide();
-        Main.panel.menuManager.addMenu(popup);
+        this.#menuManager = new PopupMenuManager(button);
+        this.#menuManager.addMenu(popup);
         popup.connect('open-state-changed', (_menu, isOpen) => {
             if (isOpen)
                 this.#rescan();
@@ -249,10 +259,11 @@ export default class TouchscreenToggleExtension extends Extension {
         }
         this.#udev = null;
         if (this.#popup) {
-            Main.panel.menuManager.removeMenu(this.#popup);
+            this.#menuManager?.removeMenu(this.#popup);
             this.#popup.destroy();
             this.#popup = null;
         }
+        this.#menuManager = null;
         this.#button?.destroy();
         this.#button = null;
         this.#icon = null;
