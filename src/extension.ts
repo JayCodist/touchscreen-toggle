@@ -1,5 +1,3 @@
-import Gdk from 'gi://Gdk';
-import Gtk from 'gi://Gtk';
 import St from 'gi://St';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
@@ -79,26 +77,64 @@ export default class TouchscreenToggleExtension extends Extension {
         return ok;
     }
 
-    #anyEnabled(): boolean {
-        return [...this.#known.values()].some(d => isBound(d.syspath));
-    }
-
     #menu(): PopupMenu {
         // Created without dontCreateMenu, so button.menu is a real PopupMenu.
         return this.#button!.menu as PopupMenu;
     }
 
+    // Install the bundled symbolic icons into the user icon theme so the panel
+    // (St.Icon) can resolve them by themed name. GNOME 50 exposes no public
+    // API to append a search path to St's own default theme, and the user's
+    // hicolor dir is already in every theme's lookup path.
+    #installIcons(): void {
+        const hicolorDir = GLib.build_filenamev([
+            GLib.get_user_data_dir(), 'icons', 'hicolor']);
+        const statusDir = GLib.build_filenamev([hicolorDir, 'scalable', 'status']);
+        try {
+            GLib.mkdir_with_parents(statusDir, 0o755);
+            const src = this.dir.get_child('icons')
+                .get_child('hicolor').get_child('scalable').get_child('status');
+            for (const name of ['touchscreen-on-symbolic.svg', 'touchscreen-off-symbolic.svg']) {
+                const dst = Gio.File.new_for_path(GLib.build_filenamev([statusDir, name]));
+                try {
+                    dst.delete(null);
+                } catch {
+                    // not present yet
+                }
+                src.get_child(name).copy(dst, Gio.FileCopyFlags.NONE, null, null);
+            }
+            // Refresh the theme cache so the running shell picks the new icons up.
+            GLib.spawn_async(
+                null, ['gtk-update-icon-cache', '-q', '-t', '-f', hicolorDir],
+                null, GLib.SpawnFlags.SEARCH_PATH, null);
+        } catch (e) {
+            log(`touchscreen-toggle: could not install icons: ${e}`);
+        }
+    }
+
     #updateIcon(): void {
         if (!this.#icon || !this.#button)
             return;
-        const any = this.#anyEnabled();
-        this.#icon.gicon = Gio.icon_new_for_string(
-            any ? 'touchscreen-on-symbolic' : 'touchscreen-off-symbolic');
+        const devices = [...this.#known.values()];
+        let iconName: string;
+        let label: string;
+        if (devices.length === 0) {
+            // Error state: no touchscreen could be found at all.
+            iconName = 'dialog-error-symbolic';
+            label = _('No touchscreen found');
+        } else if (devices.every(d => isBound(d.syspath))) {
+            // All discovered touchscreens connected.
+            iconName = 'touchscreen-on-symbolic';
+            label = _('Touchscreen enabled');
+        } else {
+            // One or more discovered touchscreens disconnected.
+            iconName = 'touchscreen-off-symbolic';
+            label = _('Touchscreen disabled');
+        }
+        this.#icon.gicon = Gio.icon_new_for_string(iconName);
         // GNOME 50 Clutter has no set_tooltip_text; accessible_name is the
         // supported label (screen-reader name + hover text).
-        this.#button.accessible_name = any
-            ? _('Touchscreen enabled')
-            : _('Touchscreen disabled');
+        this.#button.accessible_name = label;
     }
 
     #rebuildMenu(): void {
@@ -148,11 +184,7 @@ export default class TouchscreenToggleExtension extends Extension {
     }
 
     override enable(): void {
-        // Make bundled symbolic icons resolvable by name.
-        const iconDir = this.dir.get_child('icons').get_path();
-        const display = Gdk.Display.get_default();
-        if (iconDir && display)
-            Gtk.IconTheme.get_for_display(display).add_search_path(iconDir);
+        this.#installIcons();
 
         // Auto-menu Button: it creates + registers its own PopupMenu (button.menu).
         const button = new Button(0.5, _('Touchscreen Toggle'));

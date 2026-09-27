@@ -47,6 +47,9 @@ install-helper:
 
 uninstall:
 	rm -rf $(INSTALL_DIR)
+	rm -f $(HOME)/.local/share/icons/hicolor/scalable/status/touchscreen-on-symbolic.svg \
+	      $(HOME)/.local/share/icons/hicolor/scalable/status/touchscreen-off-symbolic.svg
+	gtk-update-icon-cache -q -t -f $(HOME)/.local/share/icons/hicolor 2>/dev/null || true
 	@echo "Extension removed. To drop the helper: sudo rm -f $(HELPER_DEST) /etc/sudoers.d/touchscreen-toggle"
 
 # extensions.gnome.org expects a zip whose top level is the extension contents.
