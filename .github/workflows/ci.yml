@@ -38,10 +38,16 @@ jobs:
 
       - name: Verify zip assembles
         run: |
-          make dist
-          unzip -l touchscreen-toggle@jaycodist-*.zip | grep -q extension.js
+          make release
+          # EGO upload zip (exact <uuid>.zip) and the versioned release copy.
+          unzip -l touchscreen-toggle@jaycodist.zip | grep -q extension.js
+          unzip -l touchscreen-toggle@jaycodist-v*.zip | grep -q extension.js
+          # Guard against the icons/icons nesting regression.
+          ! unzip -l touchscreen-toggle@jaycodist.zip | grep -q 'icons/icons/'
 
       - uses: actions/upload-artifact@v4
         with:
           name: extension-zip
-          path: touchscreen-toggle@jaycodist-*.zip
+          path: |
+            touchscreen-toggle@jaycodist.zip
+            touchscreen-toggle@jaycodist-v*.zip
