@@ -2,7 +2,7 @@
   "uuid": "touchscreen-toggle@jaycodist",
   "name": "Touchscreen Toggle",
   "description": "Enable or disable touchscreen devices from the top bar (driver-level, works on Wayland and X11)",
-  "shell-version": ["45", "46", "47", "48", "49", "50", "51"],
+    "shell-version": ["45", "46", "47", "48", "49", "50"],
   "url": "https://github.com/JayCodist/touchscreen-toggle",
   "version": 1,
   "gettext-domain": "touchscreen-toggle"

@@ -35,6 +35,8 @@ export default class TouchscreenToggleExtension extends Extension {
     #menuManager: PopupMenuManager | null = null;
     #udev: GUdev.Client | null = null;
     #udevId = 0;
+    #buttonPressId = 0;
+    #popupOpenId = 0;
     #debounceId = 0;
     // Every touchscreen ever seen (persisted to STATE_PATH, see above), keyed
     // by syspath. Drives the menu so a disabled device never disappears from it.
@@ -226,12 +228,12 @@ export default class TouchscreenToggleExtension extends Extension {
         popup.actor.hide();
         this.#menuManager = new PopupMenuManager(button);
         this.#menuManager.addMenu(popup);
-        popup.connect('open-state-changed', (_menu, isOpen) => {
+        this.#popupOpenId = popup.connect('open-state-changed', (_menu, isOpen) => {
             if (isOpen)
                 this.#rescan();
         });
 
-        button.connect('button-press-event', (_actor, event) => {
+        this.#buttonPressId = button.connect('button-press-event', (_actor, event) => {
             if (event.get_button() === Clutter.BUTTON_PRIMARY) {
                 this.#onActivate();
                 return Clutter.EVENT_STOP;
@@ -249,6 +251,14 @@ export default class TouchscreenToggleExtension extends Extension {
     }
 
     override disable(): void {
+        if (this.#buttonPressId) {
+            this.#button?.disconnect(this.#buttonPressId);
+            this.#buttonPressId = 0;
+        }
+        if (this.#popupOpenId) {
+            this.#popup?.disconnect(this.#popupOpenId);
+            this.#popupOpenId = 0;
+        }
         if (this.#udevId) {
             this.#udev?.disconnect(this.#udevId);
             this.#udevId = 0;
@@ -266,6 +276,10 @@ export default class TouchscreenToggleExtension extends Extension {
         this.#menuManager = null;
         this.#button?.destroy();
         this.#button = null;
+        // The icon is a child of the button (destroyed with it), but destroy it
+        // explicitly so teardown is complete even if the button is ever detached
+        // first.
+        this.#icon?.destroy();
         this.#icon = null;
     }
 }
