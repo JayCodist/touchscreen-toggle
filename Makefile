@@ -4,12 +4,16 @@
 # deviceUtils.js in dist/, which is what gets installed and zipped.
 UUID        := touchscreen-toggle@jaycodist
 VERSION     := $(shell sed -nE 's/.*"version"[^0-9]*([0-9]+).*/\1/p' src/metadata.json)
-ZIP         := $(UUID)-$(VERSION).zip
+# extensions.gnome.org only accepts a zip named exactly <uuid>.zip; the version
+# is read from metadata.json, not the filename. Keep a versioned copy for the
+# GitHub release asset.
+ZIP         := $(UUID).zip
+RELEASE_ZIP := $(UUID)-v$(VERSION).zip
 INSTALL_DIR := $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
 HELPER      := data/touchscreen-toggle.sh
 HELPER_DEST := /usr/local/bin/touchscreen-toggle
 
-.PHONY: all build install uninstall install-helper dist clean check typecheck
+.PHONY: all build install uninstall install-helper dist release clean check typecheck
 
 all: build
 
@@ -17,6 +21,9 @@ all: build
 build: node_modules/.install-stamp
 	npx tsc
 	@cp src/metadata.json dist/metadata.json
+	@# Remove before copying: `cp -r src/icons dist/icons` nests into
+	@# dist/icons/icons/ when the destination already exists from a previous build.
+	@rm -rf dist/icons
 	@cp -r src/icons dist/icons
 	@echo "Built dist/ for $(UUID) v$(VERSION)"
 
@@ -31,6 +38,9 @@ check: build
 
 # Install the extension (unprivileged).
 install: build
+	@# Wipe the install dir first: copying over an existing tree leaves stale
+	@# files and `cp -r` nests directories (e.g. icons/icons/).
+	@rm -rf $(INSTALL_DIR)
 	@mkdir -p $(INSTALL_DIR)
 	@cp -r dist/* $(INSTALL_DIR)/
 	@echo "Installed to $(INSTALL_DIR)"
@@ -55,7 +65,12 @@ uninstall:
 # extensions.gnome.org expects a zip whose top level is the extension contents.
 dist: build
 	cd dist && zip -r ../$(ZIP) . -x '*.~*'
-	@echo "Wrote $(ZIP)"
+	@echo "Wrote $(ZIP) (upload this to extensions.gnome.org)"
+
+# Build the EGO zip plus a versioned copy for a GitHub release asset.
+release: dist
+	@cp $(ZIP) $(RELEASE_ZIP)
+	@echo "Wrote $(RELEASE_ZIP)"
 
 clean:
-	rm -rf dist $(ZIP)
+	rm -rf dist $(ZIP) $(RELEASE_ZIP)
