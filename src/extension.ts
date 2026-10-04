@@ -9,16 +9,17 @@ import { Button } from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import { PopupMenu, PopupMenuItem, PopupMenuManager, PopupSwitchMenuItem } from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { listTouchscreens, isBound, type Touchscreen } from './deviceUtils.js';
 
-// Fixed, documented location of the privileged helper (see README install step).
+// The privileged helper lives at this path. The README explains how to install it.
 const HELPER_PATH = '/usr/local/bin/touchscreen-toggle';
 
-// Subsystems that can carry a touchscreen; uevents here trigger a re-scan.
+// Subsystems that can contain a touchscreen. A uevent on these subsystems starts
+// a re-scan.
 const WATCH_SUBSYSTEMS = ['hid', 'usb', 'i2c', 'serio', 'input'];
 
-// Where the session-independent device registry is stored. An unbound device
-// loses its ID_INPUT_TOUCHSCREEN udev property, so enumeration alone cannot
-// find it again after logout/reboot; persisting what we've seen keeps the
-// menu able to re-enable it.
+// Path of the device registry. This file survives logout and reboot. An unbound
+// device loses its ID_INPUT_TOUCHSCREEN udev property, so enumeration cannot find
+// it again. The registry records every device the extension sees. This lets the
+// menu re-enable a device after it stops reporting as a touchscreen.
 const STATE_PATH = GLib.build_filenamev(
     [GLib.get_user_data_dir(), 'touchscreen-toggle', 'devices.json']);
 
@@ -26,20 +27,21 @@ export default class TouchscreenToggleExtension extends Extension {
     #button: Button | null = null;
     #icon: St.Icon | null = null;
     #popup: PopupMenu | null = null;
-    // Private manager owning our popup's open/close grab. Deliberately NOT the
-    // shared Main.panel.menuManager: registering the real popup there alongside
-    // the button's auto-registered PopupDummyMenu (same source actor) makes the
-    // panel open it on hover via _findMenuForSource. A private manager keeps the
-    // outside-click-close grab while its captured-event lives on the hidden
-    // BoxPointer, so hovering the button can never trigger an open.
+    // A private manager controls the open and close grab for our popup. Do not use
+    // the shared Main.panel.menuManager. If you register the popup on that manager,
+    // it shares a source actor with the button's PopupDummyMenu. The panel then
+    // opens the popup when the pointer hovers over the button. A private manager
+    // keeps the outside-click-close behavior. Its captured-event handler lives on
+    // the hidden BoxPointer, so hovering over the button cannot open the popup.
     #menuManager: PopupMenuManager | null = null;
     #udev: GUdev.Client | null = null;
     #udevId = 0;
     #buttonPressId = 0;
     #popupOpenId = 0;
     #debounceId = 0;
-    // Every touchscreen ever seen (persisted to STATE_PATH, see above), keyed
-    // by syspath. Drives the menu so a disabled device never disappears from it.
+    // Every touchscreen the extension has seen, keyed by syspath. The extension
+    // saves this map to STATE_PATH. The menu is built from it, so a disabled device
+    // stays in the menu.
     #known = new Map<string, Touchscreen>();
     #syncing = false;
 
@@ -54,15 +56,15 @@ export default class TouchscreenToggleExtension extends Extension {
             for (const d of list) {
                 if (!d?.syspath || !d?.subsystem || !d?.name)
                     continue;
-                // Prune devices physically removed since last session (an
-                // unbound-but-present touchscreen keeps its sysfs dir, so this
-                // only drops genuinely gone hardware).
+                // Remove devices that are no longer present. An unbound touchscreen
+                // keeps its sysfs directory, so this check only removes hardware that
+                // was unplugged.
                 if (!Gio.File.new_for_path(d.syspath).query_exists(null))
                     continue;
                 this.#known.set(d.syspath, d);
             }
         } catch {
-            // first run / corrupt state: start empty
+            // First run or a corrupt file: start with an empty registry.
         }
     }
 
@@ -83,7 +85,7 @@ export default class TouchscreenToggleExtension extends Extension {
         if (!ok) {
             const msg = err ? new TextDecoder().decode(err).trim() : '';
             Main.notify(_('Touchscreen toggle failed'),
-                msg || _('Helper missing or sudoers not set up. See the extension README.'));
+                msg || _('The helper is missing or the sudoers rule is not set up. See the README.'));
         }
         return ok;
     }
@@ -92,10 +94,10 @@ export default class TouchscreenToggleExtension extends Extension {
         return this.#popup!;
     }
 
-    // Install the bundled symbolic icons into the user icon theme so the panel
-    // (St.Icon) can resolve them by themed name. GNOME 50 exposes no public
-    // API to append a search path to St's own default theme, and the user's
-    // hicolor dir is already in every theme's lookup path.
+    // Copy the bundled symbolic icons into the user icon theme. The panel resolves
+    // them by themed name from there. GNOME 50 has no public API to add a search
+    // path to the default St theme. The user hicolor directory is already in the
+    // lookup path of every theme.
     #installIcons(): void {
         const hicolorDir = GLib.build_filenamev([
             GLib.get_user_data_dir(), 'icons', 'hicolor']);
@@ -109,11 +111,11 @@ export default class TouchscreenToggleExtension extends Extension {
                 try {
                     dst.delete(null);
                 } catch {
-                    // not present yet
+                    // The file does not exist yet.
                 }
                 src.get_child(name).copy(dst, Gio.FileCopyFlags.NONE, null, null);
             }
-            // Refresh the theme cache so the running shell picks the new icons up.
+            // Update the theme cache so the running Shell loads the new icons.
             GLib.spawn_async(
                 null, ['gtk-update-icon-cache', '-q', '-t', '-f', hicolorDir],
                 null, GLib.SpawnFlags.SEARCH_PATH, null);
@@ -129,21 +131,21 @@ export default class TouchscreenToggleExtension extends Extension {
         let iconName: string;
         let label: string;
         if (devices.length === 0) {
-            // Error state: no touchscreen could be found at all.
+            // Error state: the extension found no touchscreen.
             iconName = 'dialog-error-symbolic';
             label = _('No touchscreen found');
         } else if (devices.every(d => isBound(d.syspath))) {
-            // All discovered touchscreens connected.
+            // Every known touchscreen is bound (enabled).
             iconName = 'touchscreen-on-symbolic';
             label = _('Touchscreen enabled');
         } else {
-            // One or more discovered touchscreens disconnected.
+            // At least one known touchscreen is unbound (disabled).
             iconName = 'touchscreen-off-symbolic';
             label = _('Touchscreen disabled');
         }
         this.#icon.gicon = Gio.icon_new_for_string(iconName);
-        // GNOME 50 Clutter has no set_tooltip_text; accessible_name is the
-        // supported label (screen-reader name + hover text).
+        // GNOME 50 Clutter has no set_tooltip_text method. accessible_name is the
+        // supported label. It sets both the screen-reader name and the hover text.
         this.#button.accessible_name = label;
     }
 
@@ -174,8 +176,8 @@ export default class TouchscreenToggleExtension extends Extension {
     }
 
     #rescan(): void {
-        // Merge freshly-detected devices into the registry; never forget one
-        // we've already seen (its udev props disappear once unbound).
+        // Add each newly detected device to the registry. Do not remove a device
+        // already in it. A device loses its udev properties once it is unbound.
         for (const dev of listTouchscreens())
             this.#known.set(dev.syspath, dev);
         this.#saveKnown();
@@ -193,9 +195,9 @@ export default class TouchscreenToggleExtension extends Extension {
         });
     }
 
-    // Single device: click toggles it directly (original UX). Two or more:
-    // click opens the per-device menu. dontCreateMenu keeps the button's own
-    // click gesture disabled so our button-press-event fully controls behavior.
+    // With one device, a click toggles it directly. With two or more devices, a
+    // click opens the menu. dontCreateMenu turns off the button's built-in click
+    // gesture, so the button-press-event handler controls all behavior.
     #onActivate(): void {
         const devices = [...this.#known.values()];
         if (devices.length === 1) {
@@ -210,18 +212,21 @@ export default class TouchscreenToggleExtension extends Extension {
     override enable(): void {
         this.#installIcons();
 
-        // dontCreateMenu=true -> button.menu is an inert PopupDummyMenu and the
-        // auto click gesture is off; we drive everything from button-press-event.
+        // dontCreateMenu=true makes button.menu an inactive PopupDummyMenu and turns
+        // off the automatic click gesture. The button-press-event handler controls
+        // every action.
         const button = new Button(0.5, _('Touchscreen Toggle'), true);
         this.#button = button;
         const icon = new St.Icon({ style_class: 'system-status-icon' });
         this.#icon = icon;
-        button.add_child(icon);
+        const box = new St.BoxLayout({ style_class: 'panel-status-indicators-box' });
+        box.add_child(icon);
+        button.add_child(box);
 
-        // Our own popup, owned by a private manager so an outside click closes
-        // it (the manager handles the modal grab) without the panel's shared
-        // manager ever opening it on hover. See #menuManager for why it must be
-        // private rather than Main.panel.menuManager.
+        // Build our own popup. A private manager owns it, so an outside click closes
+        // it. The manager handles the modal grab. The shared panel manager never
+        // opens this popup on hover. See #menuManager for why the manager must be
+        // private and not Main.panel.menuManager.
         const popup = new PopupMenu(button, 0.5, St.Side.TOP);
         this.#popup = popup;
         Main.uiGroup.add_child(popup.actor);
@@ -276,9 +281,9 @@ export default class TouchscreenToggleExtension extends Extension {
         this.#menuManager = null;
         this.#button?.destroy();
         this.#button = null;
-        // The icon is a child of the button (destroyed with it), but destroy it
-        // explicitly so teardown is complete even if the button is ever detached
-        // first.
+        // The icon is a child of the button, so destroying the button destroys it.
+        // Call destroy() explicitly so teardown is complete even if the button
+        // detaches first.
         this.#icon?.destroy();
         this.#icon = null;
     }

@@ -24,4 +24,4 @@ body:
     id: context
     attributes:
       label: Additional context
-      description: Hardware, distro, GNOME version, screenshots…
+      description: Hardware, distribution, GNOME version, and screenshots.

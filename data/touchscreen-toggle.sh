@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 #
-# touchscreen-toggle.sh — enable/disable an input device at the kernel driver level.
+# touchscreen-toggle.sh: Enable or disable an input device at the kernel driver
+# level.
 #
 # Usage: touchscreen-toggle.sh <sysfs-device-path> <subsystem> <on|off|toggle>
 #
-#   <sysfs-device-path>  real device dir, e.g.
+#   <sysfs-device-path>  The real device directory, for example
 #                        /sys/devices/pci0000:00/.../0018:056A:4998.0002
-#   <subsystem>          the device's udev SUBSYSTEM (hid, usb, i2c, serio, ...),
-#                        used to locate /sys/bus/<subsystem>/drivers_probe.
+#   <subsystem>          The udev SUBSYSTEM of the device (hid, usb, i2c, serio,
+#                        or another). The script uses it to build the path
+#                        /sys/bus/<subsystem>/drivers_probe.
 #
-# Disabling unbinds the device from its driver (the kernel stops seeing it);
-# enabling re-probes it, letting the kernel re-bind the matched driver — so no
-# driver name is ever hard-coded.
+# To disable, the script unbinds the device from its driver. The kernel then
+# stops seeing the device. To enable, the script re-probes the device, and the
+# kernel binds the matching driver again. The script never stores a driver name.
 #
-# Designed to be run via sudo with a NOPASSWD sudoers entry limited to this
-# script. Input is therefore validated strictly: only real directories under
-# /sys/ are accepted, path traversal is rejected, and only validated strings
-# are ever written to sysfs.
+# Run this script with sudo. A NOPASSWD sudoers entry limits it to this script
+# path. The script validates every argument. It accepts only real directories
+# under /sys/, rejects path traversal, and writes only validated strings to
+# sysfs.
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -32,7 +34,7 @@ DEVPATH="$1"
 SUBSYSTEM="$2"
 ACTION="$3"
 
-# --- strict input validation -------------------------------------------------
+# Strict input validation. No sysfs write happens until these checks pass.
 [[ "$DEVPATH" != *'..'* ]] || { echo "error: path traversal rejected" >&2; exit 2; }
 if [[ ! "$DEVPATH" =~ ^/sys/[a-zA-Z0-9_/:.+[:space:]-]+$ ]]; then
     echo "error: refusing unexpected device path: $DEVPATH" >&2
@@ -47,7 +49,7 @@ fi
 
 DEVNAME=$(basename "$DEVPATH")
 
-# Bound == the driver symlink exists.
+# A device is bound when its driver symlink exists.
 is_bound() { [[ -e "$DEVPATH/driver" ]]; }
 
 do_off() {
@@ -70,7 +72,7 @@ do_on() {
     local probe="/sys/bus/$SUBSYSTEM/drivers_probe"
     [[ -w "$probe" ]] || { echo "error: $probe not writable" >&2; exit 1; }
     printf '%s' "$DEVNAME" > "$probe"
-    # drivers_probe returns before binding finishes; give udev a moment.
+    # drivers_probe returns before the kernel finishes binding. Wait for udev.
     sleep 0.2
     if is_bound; then
         echo "enabled $DEVNAME (driver $(basename "$(readlink -f "$DEVPATH/driver")") bound)"

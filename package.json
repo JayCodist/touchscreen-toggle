@@ -1,7 +1,7 @@
 {
   "name": "touchscreen-toggle",
   "version": "1.0.0",
-  "description": "GNOME Shell extension to enable/disable touchscreens from the top bar (driver-level, hardware-agnostic)",
+  "description": "GNOME Shell extension that enables or disables any touchscreen from the top bar at the driver level",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

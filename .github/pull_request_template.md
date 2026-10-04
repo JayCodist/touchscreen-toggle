@@ -8,12 +8,12 @@
 
 ## How was it tested?
 
-<!-- e.g. typecheck + toggled a Wacom HID device on GNOME 50 (Wayland). -->
+<!-- For example: run typecheck, then toggle a Wacom HID device on GNOME 50 (Wayland). -->
 
 - [ ] `npm run typecheck` passes
-- [ ] Tested on real hardware (describe device/GNOME version above)
-- [ ] Any `/sys`- or sudoers-touching change is called out here (see SECURITY.md)
+- [ ] Tested on real hardware. Describe the device and GNOME version above.
+- [ ] Call out any change that touches `/sys` or sudoers here. See SECURITY.md.
 
-## Screenshots / recordings
+## Screenshots and recordings
 
-<!-- Optional but appreciated for UI changes. -->
+<!-- Optional. Add these for UI changes. -->

@@ -1,5 +1,5 @@
 name: 🐛 Bug report
-description: Report a bug or a device that isn't detected/toggled correctly
+description: Report a bug or a device that the extension does not detect or toggle correctly
 labels: ["bug", "triage"]
 body:
   - type: markdown
@@ -10,7 +10,7 @@ body:
     id: description
     attributes:
       label: Describe the bug
-      placeholder: What happened vs. what you expected?
+      placeholder: What happened and what did you expect to happen?
     validations:
       required: true
   - type: textarea
@@ -27,21 +27,21 @@ body:
     id: gnome
     attributes:
       label: GNOME Shell version
-      placeholder: e.g. 50.1 (run: gnome-shell --version)
+      placeholder: For example, 50.1. Run: gnome-shell --version
     validations:
       required: true
   - type: input
     id: distro
     attributes:
       label: Distribution
-      placeholder: e.g. Ubuntu 26.04
+      placeholder: For example, Ubuntu 26.04
     validations:
       required: true
   - type: textarea
     id: devices
     attributes:
       label: Touchscreen device info
-      description: Help us support your hardware — paste the output of the command below.
+      description: Help us support your hardware. Paste the output of the command below.
       render: shell
       placeholder: |
         udevadm info -e | grep -B5 ID_INPUT_TOUCHSCREEN=1
@@ -49,5 +49,5 @@ body:
     id: logs
     attributes:
       label: Relevant logs
-      description: Optional — output of `journalctl --user -b | grep -i touchscreen`
+      description: Optional. Output of `journalctl --user -b | grep -i touchscreen`
       render: shell

@@ -10,8 +10,8 @@
 /// <reference types="@girs/gjs/ambient" />
 /// <reference types="@girs/gnome-shell/ambient" />
 
-// GJS provides this WHATWG global at runtime; the @girs/gjs ambient path does
-// not declare it, so we do so here (minimal surface we use).
+// GJS provides this WHATWG global at runtime. The @girs/gjs ambient types do not
+// declare it, so this file declares the small part of it that the code uses.
 declare class TextDecoder {
     constructor(label?: string, options?: { fatal?: boolean; ignoreBOM?: boolean });
     decode(input?: ArrayBufferView | ArrayBuffer | null): string;

@@ -1,29 +1,30 @@
 # Touchscreen Toggle
 
-A GNOME Shell extension to enable or disable touchscreen devices straight from
-the top bar. It works by unbinding/rebinding the device's kernel driver, so it
-works on **Wayland and X11**, on **GNOME 45–51**, and with **any** touchscreen
-(Wacom, ELAN, Goodix, Atmel, USB, I²C, …) — no device is hard-coded.
+This GNOME Shell extension enables or disables touchscreen devices from the top
+bar. It unbinds and rebinds the kernel driver of the device. It works on Wayland
+and on X11. It works on GNOME 45 or newer. It works with any touchscreen, such
+as a Wacom, ELAN, Goodix, or Atmel device on USB, I²C, or another bus. No device
+is hard-coded.
 
 ## How it works
 
-- The panel icon reflects whether detected touchscreens are connected. With a
-  single touchscreen, clicking the icon toggles it directly; with two or more,
-  clicking opens a menu with one on/off switch per device.
-- Detection reads udev: any input device advertised as `ID_INPUT_TOUCHSCREEN=1`
-  is grouped up to the nearest bus device that owns a driver — that is the node
-  the kernel's `unbind` / `drivers_probe` ABI operates on.
-- The icon updates **event-driven** via a `GUdev` `uevent` subscription
-  (no polling), so it is instant and battery-friendly.
-- Because toggling requires writing to `/sys`, the actual privileged action is
-  done by a tiny helper script run through `sudo`. The helper validates its
-  arguments strictly and only ever writes a device name to sysfs.
+- The panel icon shows whether each detected touchscreen is connected. If you
+  have one touchscreen, a click on the icon toggles it directly. If you have two
+  or more, a click opens a menu with one switch for each device.
+- Detection reads udev. The extension groups every input device that reports
+  `ID_INPUT_TOUCHSCREEN=1` up to the nearest bus device that owns a driver. That
+  device is the node the kernel `unbind` and `drivers_probe` interface acts on.
+- The extension subscribes to `GUdev` `uevent` events. The icon updates when an
+  event arrives. The extension does not poll for changes.
+- Toggling writes to `/sys`, which needs root. A small helper script does the
+  privileged action through `sudo`. The helper checks its arguments and writes
+  only a device name to sysfs.
 
 ## Requirements
 
 - GNOME Shell 45 or newer
-- `bash`, `sudo`
-- No hard dependency on any specific touchscreen driver
+- `bash` and `sudo`
+- No dependency on a specific touchscreen driver
 
 ## Installation
 
@@ -32,40 +33,43 @@ works on **Wayland and X11**, on **GNOME 45–51**, and with **any** touchscreen
 From a checkout of this repository:
 
 ```sh
-make install        # installs the extension to ~/.local/share/gnome-shell/extensions
+make install        # Installs the extension into ~/.local/share/gnome-shell/extensions
 ```
 
-Then restart GNOME Shell (log out / log back in on Wayland; <kbd>Alt</kbd>+<kbd>F2</kbd> → `r` on X11) and enable it with the **Extensions** app or:
+Restart GNOME Shell. On Wayland, log out and log back in. On X11, press
+<kbd>Alt</kbd>+<kbd>F2</kbd>, then type `r`. Then enable the extension with the
+Extensions app, or run:
 
 ```sh
 gnome-extensions enable touchscreen-toggle@jaycodist
 ```
 
-### 2. Install the privileged helper + sudoers rule
+### 2. Install the privileged helper and the sudoers rule
 
-The helper must live at `/usr/local/bin/touchscreen-toggle` (the path the
-extension calls). One command installs it and grants your user passwordless
-sudo **only** for that script:
+The helper must be at `/usr/local/bin/touchscreen-toggle`. This is the path the
+extension calls. One command installs the helper and gives your user
+passwordless sudo for only that script:
 
 ```sh
 sudo make install-helper
 ```
 
-This is the only step that needs root, and it is deliberately separate so you
-can review exactly what is being installed.
+This is the only step that needs root. It is a separate step so you can review
+what it installs.
 
 <details>
 <summary>What <code>install-helper</code> does</summary>
 
-- copies `data/touchscreen-toggle.sh` to `/usr/local/bin/touchscreen-toggle` (mode `0755`)
-- writes `/etc/sudoers.d/touchscreen-toggle`, mode `0440`, containing:
+- Copies `data/touchscreen-toggle.sh` to `/usr/local/bin/touchscreen-toggle` with
+  mode `0755`.
+- Writes `/etc/sudoers.d/touchscreen-toggle` with mode `0440`. The file contains:
 
   ```
   <your-user> ALL=(ALL) NOPASSWD: /usr/local/bin/touchscreen-toggle
   ```
 
-The sudoers line is scoped to that single absolute path, so it does not grant
-general root. To remove:
+The sudoers rule applies only to that one absolute path. It does not grant
+general root. To remove both files, run:
 
 ```sh
 sudo rm -f /etc/sudoers.d/touchscreen-toggle /usr/local/bin/touchscreen-toggle
@@ -83,59 +87,63 @@ sudo chmod 0440 /etc/sudoers.d/touchscreen-toggle
 
 ## Troubleshooting
 
-- **Nothing happens / "toggle failed" notification** — the helper or sudoers
-  rule is missing. Run `sudo -n /usr/local/bin/touchscreen-toggle` to check; you
-  should see a `usage:` line (not a password prompt).
-- **Icon is stuck on "disabled"** — no touchscreen was detected. Verify with
-  `udevadm info -e | grep -l ID_INPUT_TOUCHSCREEN` or list them:
-  `ls /sys/class/input/*/device/../ 2>/dev/null` and check `ID_INPUT_TOUCHSCREEN`.
-- **Device won't re-enable** — some drivers need a physical re-plug or a
-  `modprobe` after unbind; the helper uses `drivers_probe`, which handles the
-  common cases (hid/usb/i2c/serio).
+- If nothing happens, or you see a "toggle failed" notification, the helper or
+  the sudoers rule is missing. Run `sudo -n /usr/local/bin/touchscreen-toggle` to
+  check. You should see a `usage:` line, not a password prompt.
+- If the icon stays on "disabled", the extension detected no touchscreen. Check
+  with `udevadm info -e | grep -l ID_INPUT_TOUCHSCREEN`. You can also list the
+  devices with `ls /sys/class/input/*/device/../ 2>/dev/null` and look for
+  `ID_INPUT_TOUCHSCREEN`.
+- If a device will not re-enable, some drivers need a physical re-plug or a
+  `modprobe` after unbind. The helper uses `drivers_probe`, which handles the
+  common cases on the hid, usb, i2c, and serio buses.
 
 ## Development
 
-The extension is written in **TypeScript** and compiled to plain ESM JavaScript
-(the only thing GJS runs). Type definitions come from the community
-[`@girs`](https://www.npmjs.com/search?q=%40girs) packages, so Shell-internal
-APIs (`PanelMenu.Button`, `GUdev`, `St`, …) are checked at compile time.
+The extension is written in TypeScript. The build compiles it to plain ESM
+JavaScript, which is what GJS runs. The community
+[`@girs`](https://www.npmjs.com/search?q=%40girs) packages provide the type
+definitions. This lets `tsc` check Shell-internal APIs such as
+`PanelMenu.Button`, `GUdev`, and `St` at compile time.
 
 ```sh
-npm ci            # install toolchain + @girs types (once)
-npm run build     # tsc -> dist/ (extension.js + deviceUtils.js)
-npm run watch     # rebuild on change
-npm run typecheck # tsc --noEmit only
-make install      # build + install dist/ to ~/.local/share/gnome-shell/extensions
-make dist         # build + zip for extensions.gnome.org
+npm ci            # Install the toolchain and the @girs types. Run this once.
+npm run build     # Run tsc and write dist/ (extension.js and deviceUtils.js).
+npm run watch     # Rebuild on each change.
+npm run typecheck # Run tsc --noEmit only.
+make install      # Build, then install dist/ into ~/.local/share/gnome-shell/extensions
+make dist         # Build, then make a zip for extensions.gnome.org
 ```
 
-Layout:
+The project layout is:
 
-- `src/*.ts` — TypeScript sources (import `gi://…` and `resource:///…` directly)
-- `ambient.d.ts` — wires the `@girs` ambient type packages for `tsc`
-- `data/touchscreen-toggle.sh` — the privileged helper (installed separately)
-- `dist/` — compiled output; this is what is installed and zipped
+- `src/*.ts`: TypeScript sources. They import `gi://` and `resource:///` URIs
+  directly.
+- `ambient.d.ts`: Connects the `@girs` ambient type packages for `tsc`.
+- `data/touchscreen-toggle.sh`: The privileged helper. You install it separately.
+- `dist/`: The compiled output. This is what you install and zip.
 
-To try your build without leaving the repo: `make install`, then log out/in and
-`gnome-extensions enable touchscreen-toggle@jaycodist`.
+To test a build from inside the repository, run `make install`. Then log out and
+log back in, and run `gnome-extensions enable touchscreen-toggle@jaycodist`.
 
-## Building a release zip
+## Build a release zip
 
 ```sh
-make dist           # produces touchscreen-toggle@jaycodist-<version>.zip
+make dist           # Produces touchscreen-toggle@jaycodist.zip
 ```
 
-Upload the zip to
+Upload that zip to
 [extensions.gnome.org](https://extensions.gnome.org/upload/) for review.
 
 ## Security notes
 
-- The extension itself runs unprivileged and never touches `/sys` directly.
-- All privileged work is one narrow, argument-validated helper invoked with
-  `sudo -n` (never prompts, and only for that exact path via sudoers).
-- The helper rejects path traversal and non-`/sys` paths, and writes only the
-  validated device basename to `unbind`/`drivers_probe`.
+- The extension runs without root and never writes to `/sys` directly.
+- All privileged work happens in one small helper. The extension calls it with
+  `sudo -n`, so it never asks for a password. The sudoers rule allows only that
+  exact path.
+- The helper rejects path traversal and any path outside `/sys`. It writes only
+  the validated device name to `unbind` and `drivers_probe`.
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+This project is licensed under GPL-3.0-or-later. See [LICENSE](LICENSE).
